@@ -42,23 +42,50 @@ Invalid rows are reported in `errors` without failing the whole batch. Duplicate
 
 ### `GET /positions/trips`
 
-Returns all stored positions grouped by vessel (for trip display):
+Returns one summary per vessel (no full position list):
 
 ```json
 [
   {
     "vesselId": 5091,
-    "positions": [
-      {
-        "id": 1,
-        "vesselId": 5091,
-        "receivedTimeUtc": "2017-12-20T22:59:12.000Z",
-        "latitude": 25.91658,
-        "longitude": -79.50869
-      }
-    ]
+    "total": 8993,
+    "firstPosition": {
+      "id": 1,
+      "vesselId": 5091,
+      "receivedTimeUtc": "2017-12-20T22:59:12.000Z",
+      "latitude": 25.91658,
+      "longitude": -79.50869
+    },
+    "lastPosition": {
+      "id": 8993,
+      "vesselId": 5091,
+      "receivedTimeUtc": "2018-01-15T10:00:00.000Z",
+      "latitude": 30.1,
+      "longitude": -75.2
+    }
   }
 ]
+```
+
+### `GET /positions/trips/:vesselId/positions`
+
+Paginated positions for a single vessel. Query params: `limit` (1–500, default 50), `offset` (default 0).
+
+```json
+{
+  "items": [
+    {
+      "id": 1,
+      "vesselId": 5091,
+      "receivedTimeUtc": "2017-12-20T22:59:12.000Z",
+      "latitude": 25.91658,
+      "longitude": -79.50869
+    }
+  ],
+  "total": 8993,
+  "limit": 50,
+  "offset": 0
+}
 ```
 
 ## Loader

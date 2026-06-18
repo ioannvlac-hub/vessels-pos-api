@@ -1,15 +1,38 @@
-import { Body, Controller, Get, HttpCode, Post } from '@nestjs/common';
-import { ICreatePositionsResult, IVesselTrip } from '../types/interfaces';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  Param,
+  ParseIntPipe,
+  Post,
+  Query,
+} from '@nestjs/common';
+import { QueryTripPositionsDto } from '../dto/query-trip-positions.dto';
+import {
+  ICreatePositionsResult,
+  IPositionsPage,
+  IVesselTripSummary,
+} from '../types/interfaces';
 import { PositionsService } from '../services/positions.service';
 
 @Controller('positions')
 export class PositionsController {
   constructor(private readonly positionsService: PositionsService) {}
 
-  /** All vessel trips — positions grouped by vessel, ordered by time. */
+  /** Vessel trip summaries without loading every position. */
   @Get('trips')
-  findTrips(): Promise<IVesselTrip[]> {
-    return this.positionsService.findTrips();
+  findTripSummaries(): Promise<IVesselTripSummary[]> {
+    return this.positionsService.findTripSummaries();
+  }
+
+  /** Paginated positions for a single vessel trip. */
+  @Get('trips/:vesselId/positions')
+  findTripPositions(
+    @Param('vesselId', ParseIntPipe) vesselId: number,
+    @Query() query: QueryTripPositionsDto,
+  ): Promise<IPositionsPage> {
+    return this.positionsService.findTripPositions(vesselId, query);
   }
 
   /**

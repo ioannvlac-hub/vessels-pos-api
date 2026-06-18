@@ -1,5 +1,9 @@
 import { PositionEntity } from '../entities/position.entity';
-import { IPosition, IVesselTrip } from '../types/interfaces';
+import {
+  IPosition,
+  IVesselTrip,
+  IVesselTripSummary,
+} from '../types/interfaces';
 
 export const toPosition = (entity: PositionEntity): IPosition => ({
   id: entity.id,
@@ -23,3 +27,15 @@ export const toVesselTrips = (entities: PositionEntity[]): IVesselTrip[] => {
     positions,
   }));
 };
+
+export const toVesselTripSummary = (
+  vesselId: number,
+  total: number,
+  first: PositionEntity,
+  last: PositionEntity,
+): IVesselTripSummary => ({
+  vesselId,
+  total,
+  firstPosition: toPosition(first),
+  lastPosition: toPosition(last),
+});

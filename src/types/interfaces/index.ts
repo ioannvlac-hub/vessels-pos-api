@@ -3,4 +3,6 @@ export * from './csv-row.interface';
 export * from './indexed-item.interface';
 export * from './insert-summary.interface';
 export * from './position-row.interface';
+export * from './positions-page.interface';
 export * from './vessel-trip.interface';
+export * from './vessel-trip-summary.interface';

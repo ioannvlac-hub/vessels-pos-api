@@ -1,4 +1,4 @@
-import { INestApplication } from '@nestjs/common';
+import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import request from 'supertest';
@@ -36,6 +36,13 @@ describe('Positions (e2e)', () => {
     }).compile();
 
     app = moduleFixture.createNestApplication();
+    app.useGlobalPipes(
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
+    );
     await app.init();
     dataSource = moduleFixture.get(DataSource);
   });
@@ -115,5 +122,58 @@ describe('Positions (e2e)', () => {
       .post('/positions')
       .send([])
       .expect(400);
+  });
+
+  it('returns trip summaries and paginated positions', async () => {
+    const positions = [
+      validPosition,
+      {
+        ...validPosition,
+        receivedTimeUtc: '2017-12-20T23:59:12.000Z',
+        latitude: 26.0,
+        longitude: -80.0,
+      },
+      {
+        ...validPosition,
+        receivedTimeUtc: '2017-12-21T00:59:12.000Z',
+        latitude: 27.0,
+        longitude: -81.0,
+      },
+    ];
+
+    await request(app.getHttpServer()).post('/positions').send(positions).expect(201);
+
+    const summaries = await request(app.getHttpServer())
+      .get('/positions/trips')
+      .expect(200);
+
+    expect(summaries.body).toHaveLength(1);
+    expect(summaries.body[0]).toMatchObject({
+      vesselId: 5091,
+      total: 3,
+      firstPosition: {
+        receivedTimeUtc: '2017-12-20T22:59:12.000Z',
+        latitude: 25.91658,
+      },
+      lastPosition: {
+        receivedTimeUtc: '2017-12-21T00:59:12.000Z',
+        latitude: 27.0,
+      },
+    });
+    expect(summaries.body[0].positions).toBeUndefined();
+
+    const page = await request(app.getHttpServer())
+      .get('/positions/trips/5091/positions')
+      .query({ limit: 2, offset: 1 })
+      .expect(200);
+
+    expect(page.body).toMatchObject({
+      total: 3,
+      limit: 2,
+      offset: 1,
+    });
+    expect(page.body.items).toHaveLength(2);
+    expect(page.body.items[0].receivedTimeUtc).toBe('2017-12-20T23:59:12.000Z');
+    expect(page.body.items[1].receivedTimeUtc).toBe('2017-12-21T00:59:12.000Z');
   });
 });

@@ -2,20 +2,33 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { plainToInstance } from 'class-transformer';
 import { validate, ValidationError } from 'class-validator';
 import { CreatePositionDto } from '../dto/create-position.dto';
+import { QueryTripPositionsDto } from '../dto/query-trip-positions.dto';
 import { PositionRepository } from '../repositories/position.repository';
 import {
   ICreatePositionError,
   ICreatePositionsResult,
   IIndexedItem,
-  IVesselTrip,
+  IPositionsPage,
+  IVesselTripSummary,
 } from '../types/interfaces';
 
 @Injectable()
 export class PositionsService {
   constructor(private readonly positionRepository: PositionRepository) {}
 
-  findTrips(): Promise<IVesselTrip[]> {
-    return this.positionRepository.findAllTrips();
+  findTripSummaries(): Promise<IVesselTripSummary[]> {
+    return this.positionRepository.findTripSummaries();
+  }
+
+  findTripPositions(
+    vesselId: number,
+    query: QueryTripPositionsDto,
+  ): Promise<IPositionsPage> {
+    return this.positionRepository.findPositionsByVessel(
+      vesselId,
+      query.limit,
+      query.offset,
+    );
   }
 
   /**
