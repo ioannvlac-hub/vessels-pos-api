@@ -176,4 +176,44 @@ describe('Positions (e2e)', () => {
     expect(page.body.items[0].receivedTimeUtc).toBe('2017-12-20T23:59:12.000Z');
     expect(page.body.items[1].receivedTimeUtc).toBe('2017-12-21T00:59:12.000Z');
   });
+
+  it('filters paginated positions by date and region', async () => {
+    const positions = [
+      validPosition,
+      {
+        ...validPosition,
+        receivedTimeUtc: '2017-12-20T23:59:12.000Z',
+        latitude: 26.0,
+        longitude: -79.0,
+      },
+      {
+        ...validPosition,
+        receivedTimeUtc: '2018-01-01T00:00:00.000Z',
+        latitude: 36.0,
+        longitude: 16.0,
+      },
+    ];
+
+    await request(app.getHttpServer()).post('/positions').send(positions).expect(201);
+
+    const filtered = await request(app.getHttpServer())
+      .get('/positions/trips/5091/positions')
+      .query({
+        limit: 50,
+        offset: 0,
+        from: '2017-12-20T00:00:00.000Z',
+        to: '2017-12-31T23:59:59.999Z',
+        region: 'Caribbean Sea',
+      })
+      .expect(200);
+
+    expect(filtered.body.total).toBe(2);
+    expect(filtered.body.items).toHaveLength(2);
+    expect(
+      filtered.body.items.every(
+        (item: { receivedTimeUtc: string }) =>
+          item.receivedTimeUtc <= '2017-12-31T23:59:59.999Z',
+      ),
+    ).toBe(true);
+  });
 });

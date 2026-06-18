@@ -6,10 +6,15 @@ import { PositionEntity } from '../entities/position.entity';
 import { toPosition, toVesselTripSummary } from '../mappers/position.mapper';
 import {
   IInsertSummary,
+  IPositionFilters,
   IPositionRow,
   IPositionsPage,
   IVesselTripSummary,
 } from '../types/interfaces';
+import {
+  applyRegionFilter,
+  isOceanRegionName,
+} from '../utils/ocean-regions';
 
 interface IVesselStatsRow {
   vesselId: number;
@@ -65,13 +70,32 @@ export class PositionRepository {
     vesselId: number,
     limit: number,
     offset: number,
+    filters: IPositionFilters = {},
   ): Promise<IPositionsPage> {
-    const [entities, total] = await this.repository.findAndCount({
-      where: { vesselId },
-      order: { receivedTimeUtc: 'ASC', id: 'ASC' },
-      take: limit,
-      skip: offset,
-    });
+    const qb = this.repository
+      .createQueryBuilder('p')
+      .where('p.vesselId = :vesselId', { vesselId });
+
+    if (filters.from) {
+      qb.andWhere('p.receivedTimeUtc >= :from', { from: filters.from });
+    }
+
+    if (filters.to) {
+      qb.andWhere('p.receivedTimeUtc <= :to', { to: filters.to });
+    }
+
+    if (filters.region && isOceanRegionName(filters.region)) {
+      applyRegionFilter(qb, filters.region);
+    }
+
+    const total = await qb.getCount();
+
+    const entities = await qb
+      .orderBy('p.receivedTimeUtc', 'ASC')
+      .addOrderBy('p.id', 'ASC')
+      .take(limit)
+      .skip(offset)
+      .getMany();
 
     return {
       items: entities.map(toPosition),

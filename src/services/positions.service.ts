@@ -28,6 +28,11 @@ export class PositionsService {
       vesselId,
       query.limit,
       query.offset,
+      {
+        from: query.from,
+        to: query.to,
+        region: query.region,
+      },
     );
   }
 
