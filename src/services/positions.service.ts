@@ -7,11 +7,16 @@ import {
   ICreatePositionError,
   ICreatePositionsResult,
   IIndexedItem,
+  IVesselTrip,
 } from '../types/interfaces';
 
 @Injectable()
 export class PositionsService {
   constructor(private readonly positionRepository: PositionRepository) {}
+
+  findTrips(): Promise<IVesselTrip[]> {
+    return this.positionRepository.findAllTrips();
+  }
 
   /**
    * Accepts one position or a batch. Each item is validated on its own:

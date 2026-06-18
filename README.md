@@ -40,6 +40,27 @@ Returns `201` with a summary:
 
 Invalid rows are reported in `errors` without failing the whole batch. Duplicate `(vesselId, receivedTimeUtc)` pairs are counted as `duplicates`.
 
+### `GET /positions/trips`
+
+Returns all stored positions grouped by vessel (for trip display):
+
+```json
+[
+  {
+    "vesselId": 5091,
+    "positions": [
+      {
+        "id": 1,
+        "vesselId": 5091,
+        "receivedTimeUtc": "2017-12-20T22:59:12.000Z",
+        "latitude": 25.91658,
+        "longitude": -79.50869
+      }
+    ]
+  }
+]
+```
+
 ## Loader
 
 With the API running:

@@ -3,7 +3,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Transactional } from 'typeorm-transactional';
 import { PositionEntity } from '../entities/position.entity';
-import { IInsertSummary, IPositionRow } from '../types/interfaces';
+import { toVesselTrips } from '../mappers/position.mapper';
+import { IInsertSummary, IPositionRow, IVesselTrip } from '../types/interfaces';
 
 @Injectable()
 export class PositionRepository {
@@ -11,6 +12,14 @@ export class PositionRepository {
     @InjectRepository(PositionEntity)
     private readonly repository: Repository<PositionEntity>,
   ) {}
+
+  async findAllTrips(): Promise<IVesselTrip[]> {
+    const entities = await this.repository.find({
+      order: { vesselId: 'ASC', receivedTimeUtc: 'ASC' },
+    });
+
+    return toVesselTrips(entities);
+  }
 
   @Transactional()
   async insertManyIdempotent(rows: IPositionRow[]): Promise<IInsertSummary> {
