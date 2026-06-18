@@ -1,21 +1,35 @@
 # Vessel Positions API
 
-NestJS ingestion API for AIS vessel position reports.
+NestJS REST API for ingesting and querying AIS vessel position reports. Data is stored in SQLite (`positions.sqlite`).
 
-## Setup
+**Stack:** Node 20 · NestJS 10 · TypeORM · SQLite (`better-sqlite3`)
+
+## Quick start
 
 ```bash
 npm install
-npm run start
+npm run start:dev    # http://localhost:3000, hot reload
 ```
 
-The API listens on `http://localhost:3000` and stores data in `positions.sqlite`.
+Load the sample dataset (API must be running):
 
-## Endpoints
+```bash
+npm run ingest -- ./data-fs-exercise.csv
+```
 
-### `POST /positions`
+## API
 
-Accepts a single position object or an array of positions:
+| Method | Path | Purpose |
+|--------|------|---------|
+| `POST` | `/positions` | Create one position or a batch |
+| `GET` | `/positions/trips` | Vessel trip summaries (no full position lists) |
+| `GET` | `/positions/trips/:vesselId/positions` | Paginated positions for one vessel |
+
+CORS is enabled for `http://localhost:5173` by default (Vue client).
+
+### Create positions — `POST /positions`
+
+**Body:** a single object or an array of:
 
 ```json
 {
@@ -26,94 +40,91 @@ Accepts a single position object or an array of positions:
 }
 ```
 
-Returns `201` with a summary:
+**Two modes:**
+
+| Caller | Header | Behaviour |
+|--------|--------|-----------|
+| Web client | *(none)* | **All-or-nothing** — any invalid row → `400`, nothing saved |
+| CSV ingest script | `X-Ingest-Partial: true` | Valid rows inserted, invalid rows in `errors[]`, `201` |
+
+**Success (`201`):**
 
 ```json
 {
-  "received": 1,
-  "inserted": 1,
+  "received": 2,
+  "inserted": 2,
   "duplicates": 0,
   "rejected": 0,
   "errors": []
 }
 ```
 
-Invalid rows are reported in `errors` without failing the whole batch. Duplicate `(vesselId, receivedTimeUtc)` pairs are counted as `duplicates`.
+**Client validation failure (`400`):** same counters with `inserted: 0` and per-row `errors[{ index, reasons }]`.
 
-### `GET /positions/trips`
+Duplicates on `(vesselId, receivedTimeUtc)` are idempotent (`duplicates` count, not an error).
 
-Returns one summary per vessel (no full position list):
+**Business rules (summary):**
 
-```json
-[
-  {
-    "vesselId": 5091,
-    "total": 8993,
-    "firstPosition": {
-      "id": 1,
-      "vesselId": 5091,
-      "receivedTimeUtc": "2017-12-20T22:59:12.000Z",
-      "latitude": 25.91658,
-      "longitude": -79.50869
-    },
-    "lastPosition": {
-      "id": 8993,
-      "vesselId": 5091,
-      "receivedTimeUtc": "2018-01-15T10:00:00.000Z",
-      "latitude": 30.1,
-      "longitude": -75.2
-    }
-  }
-]
-```
+- ISO-8601 UTC timestamp, not in the future
+- Latitude/longitude in valid ranges
+- Same timestamp + different coordinates → rejected
+- Implausible jumps between reports → rejected (max distance **50,000 km**)
 
-### `GET /positions/trips/:vesselId/positions`
+### Trip summaries — `GET /positions/trips`
 
-Paginated positions for a single vessel. Query params: `limit` (1–500, default 50), `offset` (default 0).
+One entry per vessel: `vesselId`, `total`, `firstPosition`, `lastPosition`.
 
-```json
-{
-  "items": [
-    {
-      "id": 1,
-      "vesselId": 5091,
-      "receivedTimeUtc": "2017-12-20T22:59:12.000Z",
-      "latitude": 25.91658,
-      "longitude": -79.50869
-    }
-  ],
-  "total": 8993,
-  "limit": 50,
-  "offset": 0
-}
-```
+### Paginated positions — `GET /positions/trips/:vesselId/positions`
 
-## Loader
+| Query | Description |
+|-------|-------------|
+| `limit` | Page size, 1–500 (default `50`) |
+| `offset` | Skip rows (default `0`) |
+| `from` | ISO datetime — inclusive start |
+| `to` | ISO datetime — inclusive end |
+| `region` | Ocean region name (e.g. `Caribbean Sea`) |
 
-With the API running:
+Response: `{ items, total, limit, offset }`.
+
+## CSV ingest
 
 ```bash
 npm run ingest -- ./data-fs-exercise.csv
 ```
 
-Environment fallbacks:
+| Variable | Default |
+|----------|---------|
+| `CSV_PATH` | `./data-fs-exercise.csv` |
+| `API_URL` | `http://localhost:3000/positions` |
+| `BATCH_SIZE` | `500` |
 
-- `CSV_PATH` (default `./data-fs-exercise.csv`)
-- `API_URL` (default `http://localhost:3000/positions`)
-- `BATCH_SIZE` (default `500`)
+The script sends `X-Ingest-Partial: true` so bad rows in a batch do not block valid ones.
 
-Expected first-run result on the provided dataset:
+Expected first run on the provided CSV: ~26,979 inserted, ~3 rejected. A second run should report all rows as duplicates.
 
-- received: 26982
-- inserted: 26979
-- duplicates: 0
-- rejected: 3
+## Configuration
 
-A second run should report `inserted: 0`, `duplicates: 26979`.
+| Variable | Default |
+|----------|---------|
+| `PORT` | `3000` |
+| `CORS_ORIGIN` | `http://localhost:5173` |
 
 ## Tests
 
 ```bash
 npm run test:e2e
 npm run typecheck
+```
+
+## Project layout
+
+```
+src/
+  controllers/   HTTP layer
+  services/      Validation and business logic
+  repositories/  TypeORM data access
+  dto/           Request validation
+  utils/         Movement checks, ocean regions
+scripts/
+  ingest.ts      CSV → POST /positions
 ```
