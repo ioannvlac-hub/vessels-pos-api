@@ -66,6 +66,42 @@ export class PositionRepository {
     return summaries;
   }
 
+  async findByVesselAndTime(
+    vesselId: number,
+    receivedTimeUtc: string,
+  ): Promise<PositionEntity | null> {
+    return this.repository.findOne({
+      where: { vesselId, receivedTimeUtc },
+      order: { id: 'ASC' },
+    });
+  }
+
+  async findNeighborPositions(
+    vesselId: number,
+    receivedTimeUtc: string,
+  ): Promise<{
+    previous: PositionEntity | null;
+    next: PositionEntity | null;
+  }> {
+    const previous = await this.repository
+      .createQueryBuilder('p')
+      .where('p.vesselId = :vesselId', { vesselId })
+      .andWhere('p.receivedTimeUtc < :receivedTimeUtc', { receivedTimeUtc })
+      .orderBy('p.receivedTimeUtc', 'DESC')
+      .addOrderBy('p.id', 'DESC')
+      .getOne();
+
+    const next = await this.repository
+      .createQueryBuilder('p')
+      .where('p.vesselId = :vesselId', { vesselId })
+      .andWhere('p.receivedTimeUtc > :receivedTimeUtc', { receivedTimeUtc })
+      .orderBy('p.receivedTimeUtc', 'ASC')
+      .addOrderBy('p.id', 'ASC')
+      .getOne();
+
+    return { previous, next };
+  }
+
   async findPositionsByVessel(
     vesselId: number,
     limit: number,

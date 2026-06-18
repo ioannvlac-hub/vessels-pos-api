@@ -1,7 +1,3 @@
-/**
- * CSV loader — streams the dataset and POSTs positions to the API in batches.
- * Does NOT write to the DB directly; all validation/insertion goes through POST /positions.
- */
 import axios from 'axios';
 import { parse } from 'csv-parse';
 import { config } from 'dotenv';
@@ -27,7 +23,7 @@ const getArg = (index: number): string | undefined => process.argv[index + 2];
  *   2 = time (HH:MM:SS)
  *   3 = optional fractional seconds (.000000)
  *
- * Empty or garbage values are returned as-is so the API rejects them explicitly.
+ * Empty or garbage values are returned as-is so the API rejects them. This is because the API expects a valid ISO-8601 datetime.
  */
 const normalizeTimestamp = (value: string | undefined): string => {
   if (value === undefined || value.trim() === '') {
@@ -49,7 +45,6 @@ const normalizeTimestamp = (value: string | undefined): string => {
   return `${date}T${time}.${millis}Z`;
 };
 
-/** Maps one CSV row (snake_case strings) to API payload (camelCase numbers). */
 const mapRow = (row: ICsvRow): IPositionRow => ({
   vesselId: Number(row.vessel_id),
   receivedTimeUtc: normalizeTimestamp(row.received_time_utc),
@@ -57,7 +52,6 @@ const mapRow = (row: ICsvRow): IPositionRow => ({
   longitude: Number(row.longitude),
 });
 
-/** Headers in the file have leading spaces — trim keys so lookups work. */
 const trimHeaderNames = (row: Record<string, string>): ICsvRow => {
   const trimmed: ICsvRow = {};
   for (const [key, value] of Object.entries(row)) {
@@ -66,16 +60,16 @@ const trimHeaderNames = (row: Record<string, string>): ICsvRow => {
   return trimmed;
 };
 
-/** POST a batch to the API; axios throws on non-2xx responses. */
 const postBatch = async (
   apiUrl: string,
   batch: IPositionRow[],
 ): Promise<ICreatePositionsResult> => {
-  const { data } = await axios.post<ICreatePositionsResult>(apiUrl, batch);
+  const { data } = await axios.post<ICreatePositionsResult>(apiUrl, batch, {
+    headers: { 'X-Ingest-Partial': 'true' },
+  });
   return data;
 };
 
-/** Accumulates per-batch summaries into running totals across the whole file. */
 const mergeSummary = (
   total: ICreatePositionsResult,
   batch: ICreatePositionsResult,
@@ -129,13 +123,13 @@ const streamCsv = async (
     }
   }
 
-  // Send the final partial batch (e.g. last 482 rows when batch size is 500)
   if (batch.length > 0) {
     batchNumber += 1;
     const summary = await postBatch(apiUrl, batch);
     total = mergeSummary(total, summary);
     console.log(
-      `Batch ${batchNumber}: received=${summary.received} inserted=${summary.inserted} duplicates=${summary.duplicates} rejected=${summary.rejected}`,
+      `Batch ${batchNumber}: 
+       received=${summary.received} inserted=${summary.inserted} duplicates=${summary.duplicates} rejected=${summary.rejected}`,
     );
   }
 
@@ -143,7 +137,6 @@ const streamCsv = async (
 };
 
 const main = async (): Promise<void> => {
-  // Priority: CLI arg → .env → hardcoded default
   const csvPath = resolve(
     process.cwd(),
     getArg(0) ?? process.env.CSV_PATH ?? './data-fs-exercise.csv',

@@ -5,7 +5,7 @@ import request from 'supertest';
 import { App } from 'supertest/types';
 import { DataSource } from 'typeorm';
 import { initializeTransactionalContext } from 'typeorm-transactional';
-import { PositionsController } from '../src/controllers/positions.controller';
+import { PositionsController, INGEST_PARTIAL_HEADER } from '../src/controllers/positions.controller';
 import { createTransactionalDataSource } from '../src/database/create-transactional-data-source';
 import { PositionEntity } from '../src/entities/position.entity';
 import { PositionRepository } from '../src/repositories/position.repository';
@@ -97,7 +97,7 @@ describe('Positions (e2e)', () => {
     });
   });
 
-  it('rejects out-of-range latitude with a clear reason', async () => {
+  it('rejects out-of-range latitude with a clear reason (client all-or-nothing)', async () => {
     const response = await request(app.getHttpServer())
       .post('/positions')
       .send([
@@ -106,7 +106,7 @@ describe('Positions (e2e)', () => {
           latitude: 107.06,
         },
       ])
-      .expect(201);
+      .expect(400);
 
     expect(response.body).toMatchObject({
       received: 1,
@@ -130,14 +130,14 @@ describe('Positions (e2e)', () => {
       {
         ...validPosition,
         receivedTimeUtc: '2017-12-20T23:59:12.000Z',
-        latitude: 26.0,
-        longitude: -80.0,
+        latitude: 25.95,
+        longitude: -79.55,
       },
       {
         ...validPosition,
-        receivedTimeUtc: '2017-12-21T00:59:12.000Z',
-        latitude: 27.0,
-        longitude: -81.0,
+        receivedTimeUtc: '2017-12-21T01:59:12.000Z',
+        latitude: 26.0,
+        longitude: -80.0,
       },
     ];
 
@@ -156,8 +156,8 @@ describe('Positions (e2e)', () => {
         latitude: 25.91658,
       },
       lastPosition: {
-        receivedTimeUtc: '2017-12-21T00:59:12.000Z',
-        latitude: 27.0,
+        receivedTimeUtc: '2017-12-21T01:59:12.000Z',
+        latitude: 26.0,
       },
     });
     expect(summaries.body[0].positions).toBeUndefined();
@@ -174,7 +174,7 @@ describe('Positions (e2e)', () => {
     });
     expect(page.body.items).toHaveLength(2);
     expect(page.body.items[0].receivedTimeUtc).toBe('2017-12-20T23:59:12.000Z');
-    expect(page.body.items[1].receivedTimeUtc).toBe('2017-12-21T00:59:12.000Z');
+    expect(page.body.items[1].receivedTimeUtc).toBe('2017-12-21T01:59:12.000Z');
   });
 
   it('filters paginated positions by date and region', async () => {
@@ -215,5 +215,174 @@ describe('Positions (e2e)', () => {
           item.receivedTimeUtc <= '2017-12-31T23:59:59.999Z',
       ),
     ).toBe(true);
+  });
+
+  it('inserts a valid batch of multiple positions', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/positions')
+      .send([
+        validPosition,
+        {
+          ...validPosition,
+          receivedTimeUtc: '2017-12-20T23:59:12.000Z',
+          latitude: 26.0,
+          longitude: -80.0,
+        },
+      ])
+      .expect(201);
+
+    expect(response.body).toMatchObject({
+      received: 2,
+      inserted: 2,
+      duplicates: 0,
+      rejected: 0,
+      errors: [],
+    });
+  });
+
+  it('accepts long-distance movement within 50000 km cap (client batch)', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/positions')
+      .send([
+        {
+          vesselId: 5091,
+          receivedTimeUtc: '2017-12-20T12:00:00.000Z',
+          latitude: 30,
+          longitude: -40,
+        },
+        {
+          vesselId: 5091,
+          receivedTimeUtc: '2017-12-21T12:00:00.000Z',
+          latitude: 10,
+          longitude: 80,
+        },
+      ])
+      .expect(201);
+
+    expect(response.body).toMatchObject({
+      received: 2,
+      inserted: 2,
+      rejected: 0,
+      errors: [],
+    });
+  });
+
+  it('allows partial ingest batch when movement is within 50000 km cap', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/positions')
+      .set(INGEST_PARTIAL_HEADER, 'true')
+      .send([
+        {
+          vesselId: 5091,
+          receivedTimeUtc: '2017-12-20T12:00:00.000Z',
+          latitude: 30,
+          longitude: -40,
+        },
+        {
+          vesselId: 5091,
+          receivedTimeUtc: '2017-12-21T12:00:00.000Z',
+          latitude: 10,
+          longitude: 80,
+        },
+      ])
+      .expect(201);
+
+    expect(response.body).toMatchObject({
+      received: 2,
+      inserted: 2,
+      rejected: 0,
+      errors: [],
+    });
+  });
+
+  it('accepts distant ocean movement within 50000 km cap', async () => {
+    await request(app.getHttpServer())
+      .post('/positions')
+      .send([
+        {
+          vesselId: 5091,
+          receivedTimeUtc: '2017-12-20T12:00:00.000Z',
+          latitude: 30,
+          longitude: -40,
+        },
+      ])
+      .expect(201);
+
+    const response = await request(app.getHttpServer())
+      .post('/positions')
+      .send([
+        {
+          vesselId: 5091,
+          receivedTimeUtc: '2017-12-21T12:00:00.000Z',
+          latitude: 10,
+          longitude: 80,
+        },
+      ])
+      .expect(201);
+
+    expect(response.body).toMatchObject({
+      received: 1,
+      inserted: 1,
+      rejected: 0,
+      errors: [],
+    });
+  });
+
+  it('accepts Gulf of Guinea to Indian Ocean within 50000 km cap', async () => {
+    await request(app.getHttpServer())
+      .post('/positions')
+      .send([
+        {
+          vesselId: 4378,
+          receivedTimeUtc: '2017-09-27T00:01:28.000Z',
+          latitude: 25.12252,
+          longitude: 56.96365,
+        },
+      ])
+      .expect(201);
+
+    const response = await request(app.getHttpServer())
+      .post('/positions')
+      .send([
+        {
+          vesselId: 4378,
+          receivedTimeUtc: '2017-09-25T00:01:28.000Z',
+          latitude: 4,
+          longitude: 6,
+        },
+      ])
+      .expect(201);
+
+    expect(response.body).toMatchObject({
+      received: 1,
+      inserted: 1,
+      rejected: 0,
+      errors: [],
+    });
+  });
+
+  it('rejects the same timestamp with different coordinates', async () => {
+    await request(app.getHttpServer())
+      .post('/positions')
+      .send([validPosition])
+      .expect(201);
+
+    const response = await request(app.getHttpServer())
+      .post('/positions')
+      .send([
+        {
+          ...validPosition,
+          latitude: 40,
+          longitude: 10,
+        },
+      ])
+      .expect(400);
+
+    expect(response.body).toMatchObject({
+      received: 1,
+      inserted: 0,
+      rejected: 1,
+    });
+    expect(response.body.errors[0].reasons.join(' ')).toMatch(/different coordinates/i);
   });
 });

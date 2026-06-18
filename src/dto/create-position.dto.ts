@@ -1,4 +1,6 @@
+import { Transform } from 'class-transformer';
 import {
+  IsDefined,
   IsInt,
   IsISO8601,
   IsNotEmpty,
@@ -24,39 +26,49 @@ export class IsNotInFutureConstraint implements ValidatorConstraintInterface {
   }
 
   defaultMessage(): string {
-    return 'receivedTimeUtc must not be in the future';
+    return 'Received time UTC must not be in the future';
   }
 }
 
+const toOptionalNumber = (value: unknown): number | undefined => {
+  if (value === null || value === undefined || value === '') {
+    return undefined;
+  }
+  return Number(value);
+};
+
 export class CreatePositionDto {
-  @IsNotEmpty({ message: 'vesselId is required' })
-  @IsInt({ message: 'vesselId must be an integer' })
-  @Min(1, { message: 'vesselId must be >= 1' })
+  @Transform(({ value }) => toOptionalNumber(value))
+  @IsDefined({ message: 'Vessel ID is required' })
+  @IsInt({ message: 'Vessel ID must be an integer' })
+  @Min(1, { message: 'Vessel ID must be greater than or equal to 1' })
   vesselId!: number;
 
-  @IsNotEmpty({ message: 'receivedTimeUtc is required' })
+  @IsNotEmpty({ message: 'Received time UTC is required' })
   @IsISO8601(
     { strict: true },
-    { message: 'receivedTimeUtc must be a valid ISO-8601 datetime' },
+    { message: 'Received time UTC must be a valid ISO-8601 datetime' },
   )
   @Validate(IsNotInFutureConstraint)
   receivedTimeUtc!: string;
 
-  @IsNotEmpty({ message: 'latitude is required' })
+  @Transform(({ value }) => toOptionalNumber(value))
+  @IsDefined({ message: 'Latitude is required' })
   @IsNumber(
     { allowNaN: false, allowInfinity: false },
-    { message: 'latitude must be a number' },
+    { message: 'Latitude must be a number' },
   )
-  @Min(-90, { message: 'latitude must be >= -90' })
-  @Max(90, { message: 'latitude must be <= 90' })
+  @Min(-90, { message: 'Latitude must be greater than or equal to -90' })
+  @Max(90, { message: 'Latitude must be less than or equal to 90' })
   latitude!: number;
 
-  @IsNotEmpty({ message: 'longitude is required' })
+  @Transform(({ value }) => toOptionalNumber(value))
+  @IsDefined({ message: 'Longitude is required' })
   @IsNumber(
     { allowNaN: false, allowInfinity: false },
-    { message: 'longitude must be a number' },
+    { message: 'Longitude must be a number' },
   )
-  @Min(-180, { message: 'longitude must be >= -180' })
-  @Max(180, { message: 'longitude must be <= 180' })
+  @Min(-180, { message: 'Longitude must be greater than or equal to -180' })
+  @Max(180, { message: 'Longitude must be less than or equal to 180' })
   longitude!: number;
 }
