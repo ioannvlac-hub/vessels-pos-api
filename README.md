@@ -2,7 +2,7 @@
 
 NestJS REST API for ingesting and querying AIS vessel position reports. Data is stored in SQLite (`positions.sqlite`).
 
-The Vue client for this API lives here: https://github.com/alexandrosgialantzis/Vessel-client-postion
+The Vue client for this API lives here: https://github.com/evangelosvlachos96-dotcom/vessels-pos-api
 
 **Stack:** Node 20 · NestJS 10 · TypeORM · SQLite (`better-sqlite3`)
 
@@ -140,3 +140,5 @@ src/
 scripts/
   ingest.ts      CSV → POST /positions
 ```
+
+## MIT Licensed
